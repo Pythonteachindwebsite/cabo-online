@@ -115,9 +115,9 @@ function validTarget(room, actorId, targetId) {
 function swapItems(room, p1, item1, p2, item2) {
   const s1=item1.slot, s2=item2.slot;
   const i1=p1.hand.indexOf(item1), i2=p2.hand.indexOf(item2);
-  item1.slot=s2; item2.slot=s1;
-  p1.hand[i1] = item2;
-  p2.hand[i2] = item1;
+  // Slots belong to the players' fixed positions; only card contents move.
+  p1.hand[i1] = {card:item2.card,slot:s1};
+  p2.hand[i2] = {card:item1.card,slot:s2};
   // Keep only card-face knowledge that remains certain, following the physical card.
   for(const k of Object.values(room.knowledge)) {
     if(k[item1.card.id]) { k[item1.card.id].ownerId=p2.id; k[item1.card.id].slot=s2; }
@@ -192,7 +192,7 @@ io.on('connection', socket => {
   socket.on('abilityPeekOwn',({slot})=>{
     const room=getRoom(socket); const a=room?.ability; if(!room||room.phase!=='ability'||a?.actorId!==socket.id) return fail(socket,'目前沒有你的特殊能力。');
     if(a.kind!=='peek-own') return fail(socket,'這張牌的能力不適用。'); const p=playerById(room,socket.id), item=findSlot(p,slot); if(!item) return fail(socket,'無效的手牌位置。');
-    remember(room,p.id,p.id,item); socket.emit('privateReveal',{card:item.card,slot}); room.ability=null; openMatch(room);
+    remember(room,p.id,p.id,item); a.step='await-reveal-ack'; socket.emit('privateReveal',{card:item.card,slot}); emitRoom(room);
   });
   socket.on('abilityPeekTarget',({targetId,slot,swap})=>{
     const room=getRoom(socket); const a=room?.ability; if(!room||room.phase!=='ability'||a?.actorId!==socket.id) return fail(socket,'目前沒有你的特殊能力.');
@@ -200,8 +200,13 @@ io.on('connection', socket => {
     if(!validTarget(room,socket.id,targetId)) return fail(socket,'這位玩家不是合法目標。');
     const target=playerById(room,targetId), item=findSlot(target,slot); if(!item) return fail(socket,'無效的目標手牌位置。');
     remember(room,socket.id,target.id,item); socket.emit('privateReveal',{card:item.card,slot,targetId});
-    if(a.kind==='peek-swap') { a.selectedTargetId=targetId; a.selectedTargetSlot=slot; a.step='decide-swap'; emitRoom(room); return; }
-    room.ability=null; openMatch(room);
+    a.selectedTargetId=targetId; a.selectedTargetSlot=slot; a.step='await-reveal-ack'; emitRoom(room);
+  });
+  socket.on('abilityRevealAck',()=>{
+    const room=getRoom(socket); const a=room?.ability;
+    if(!room||room.phase!=='ability'||a?.actorId!==socket.id||a.step!=='await-reveal-ack') return;
+    if(a.kind==='peek-swap') { a.step='decide-swap'; emitRoom(room); }
+    else { room.ability=null; openMatch(room); }
   });
   socket.on('abilityChooseSwap',({swap})=>{
     const room=getRoom(socket); const a=room?.ability; if(!room||room.phase!=='ability'||a?.actorId!==socket.id||a.kind!=='peek-swap'||a.step!=='decide-swap') return fail(socket,'目前不能決定是否交換。');
