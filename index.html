@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#123d32" />
+  <title>CABO 四人線上遊戲</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="topbar"><div class="brand"><div class="brand-mark">C</div><div><h1>CABO</h1><p>四人線上紙牌遊戲</p></div></div><div id="connection" class="pill">連線中…</div></header>
+    <section id="entry" class="panel entry-panel">
+      <div class="hero"><span class="eyebrow">PLAY TOGETHER</span><h2>和朋友一起玩 CABO</h2><p>建立私人房間，分享房間代碼，最多四人即時連線。</p></div>
+      <label for="playerName">你的暱稱</label><input id="playerName" maxlength="18" placeholder="輸入暱稱" value="玩家" />
+      <div class="entry-actions"><button id="createBtn" class="primary">建立房間</button><div class="join-row"><input id="roomCode" maxlength="4" placeholder="房間代碼" autocapitalize="characters" /><button id="joinBtn">加入房間</button></div></div>
+      <p class="small-note">提示：四位玩家都加入後，由房主開始遊戲。請每位玩家用自己的手機或電腦開啟同一個網址。</p>
+    </section>
+    <section id="game" class="hidden">
+      <div class="room-strip panel"><div><span class="muted">房間代碼</span><strong id="roomCodeLabel">----</strong></div><button id="copyCodeBtn" class="ghost">複製代碼</button><div class="deck-info"><span class="muted">抽牌堆</span><strong id="deckCount">—</strong></div></div>
+      <div id="notice" class="notice">等待遊戲狀態…</div>
+      <section class="table-area">
+        <div id="players" class="players-grid"></div>
+        <div class="center-piles"><div class="pile-wrap"><span class="muted">抽牌堆</span><button id="drawBtn" class="card back draw-card" aria-label="抽牌"><span>抽牌</span></button></div><div class="pile-wrap"><span class="muted">棄牌堆頂牌</span><div id="topDiscard" class="card empty-card">尚無棄牌</div></div></div>
+        <div id="drawnPanel" class="drawn-panel hidden"></div>
+        <div id="abilityPanel" class="panel ability-panel hidden"></div>
+        <div id="matchPanel" class="panel match-panel hidden"></div>
+        <div id="peekPanel" class="panel peek-panel hidden"><h3>起始查看</h3><p>請查看靠近自己的兩張手牌，記住後蓋回原位。</p><button id="finishPeekBtn" class="primary">我已記住，蓋回手牌</button></div>
+        <div id="waitingPanel" class="panel hidden"><h3>等待玩家加入</h3><p id="waitingText">需要四位玩家才能開始。</p><button id="startBtn" class="primary hidden">開始遊戲</button></div>
+        <div id="overPanel" class="panel hidden"></div>
+      </section>
+      <section class="panel history-panel"><h3>遊戲紀錄</h3><ul id="history"></ul></section>
+    </section>
+    <div id="toast" class="toast hidden"></div>
+    <div id="revealModal" class="modal hidden"><div class="modal-card"><button id="closeReveal" class="close">×</button><p class="muted">你看到的牌</p><div id="revealedCard"></div><p id="revealCaption">請記住牌面。</p><button id="ackReveal" class="primary">知道了</button></div></div>
+    <footer>私人房間 · 即時同步 · 請以房間代碼邀請朋友</footer>
+  </main>
+  <script src="/socket.io/socket.io.js"></script><script src="/app.js"></script>
+</body>
+</html>
