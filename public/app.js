@@ -11,7 +11,8 @@ function render(){ if(!state)return; showGame(); $('roomCodeLabel').textContent=
   $('players').innerHTML = state.players.map(p=>{
     const isCurrent=p.id===state.turnPlayerId; const hand=p.hand.map(item=>{
       const label=slotLabels[item.slot]||item.slot; const own=p.isMe; const known=!!item.card; const clickable=canClickHand(p,item);
-      return `<div class="hand-slot"><div class="slot-label">${esc(label)}</div>${clickable?`<button class="card-btn ${selectedOwnSlot===item.slot?'selected':''}" data-slot="${esc(item.slot)}" data-player="${esc(p.id)}">${cardHTML(known?item.card:null,!known)}</button>`:cardHTML(known?item.card:null,!known)}${!known?'<span class="unknown-label">蓋牌</span>':''}</div>`;
+      const isBlindSwapSelection = !!(p.isMe && state.phase==='ability' && state.ability?.actorId===socket.id && state.ability?.kind==='blind-swap' && state.ability?.step==='target' && state.ability?.selectedOwnSlot===item.slot);
+      return `<div class="hand-slot"><div class="slot-label">${esc(label)}</div>${clickable?`<button class="card-btn ${isBlindSwapSelection?'selected':''}" data-slot="${esc(item.slot)}" data-player="${esc(p.id)}">${cardHTML(known?item.card:null,!known)}</button>`:cardHTML(known?item.card:null,!known)}${!known?'<span class="unknown-label">蓋牌</span>':''}</div>`;
     }).join('');
     return `<article class="player-card ${p.isMe?'me':''}"><div class="player-head"><div><div class="player-name">${esc(p.name)}${p.isMe?'（你）':''}</div><div class="player-meta">${p.handCount} 張手牌 · ${p.connected?'在線':'離線'}</div></div><div class="player-tags">${isCurrent?'<span class="tag current">目前回合</span>':''}${p.declared?'<span class="tag declared">CABO</span>':''}</div></div><div class="hand-grid">${hand}</div></article>`;
   }).join('');
@@ -61,7 +62,7 @@ function wireAbility(){const b=$('skipSwapBtn');if(b)b.onclick=()=>socket.emit('
 function renderHistory(){ $('history').innerHTML=(state.history||[]).slice().reverse().map(x=>`<li>${esc(x)}</li>`).join('')||'<li>尚無紀錄</li>'; }
 socket.on('connect',()=>{$('connection').textContent='已連線';$('connection').style.background='#dff1e3';$('connection').style.color='#21634e';});
 socket.on('disconnect',()=>{$('connection').textContent='連線中斷';$('connection').style.background='#fbe5e6';$('connection').style.color='#a42d3a';});
-socket.on('state',s=>{if(s.phase==='peek' && state?.phase!=='peek')hasConfirmedPeek=false;state=s;if(s.phase!=='drawn')myDrawn=null;if(s.phase!=='peek')hasConfirmedPeek=false;render();});
+socket.on('state',s=>{if(s.phase==='peek' && state?.phase!=='peek')hasConfirmedPeek=false;state=s;if(s.phase!=='drawn')myDrawn=null;if(s.phase!=='peek')hasConfirmedPeek=false;if(!(s.phase==='ability'&&s.ability?.actorId===socket.id&&s.ability?.kind==='blind-swap'))selectedOwnSlot=null;render();});
 socket.on('drawnCard',card=>{myDrawn=card;render();});
 socket.on('privateReveal',data=>{pendingReveal=data;$('revealedCard').innerHTML=cardHTML(data.card);$('revealCaption').textContent=data.targetId?'請記住這張牌；只有你能看到。':'請記住這張牌，之後會蓋回原位。';$('revealModal').classList.remove('hidden');});
 function closeReveal(){ $('revealModal').classList.add('hidden'); pendingReveal=null; }
