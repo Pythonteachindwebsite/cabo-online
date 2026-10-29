@@ -1,0 +1,9 @@
+{
+  "name": "cabo-online",
+  "version": "1.0.0",
+  "description": "A real-time four-player CABO card game",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=20" },
+  "dependencies": { "express": "^4.21.2", "socket.io": "^4.8.1" }
+}
