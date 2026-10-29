@@ -1,6 +1,6 @@
 const socket = io();
 const $ = id => document.getElementById(id);
-let state = null, myDrawn = null, selectedOwnSlot = null, pendingReveal = null;
+let state = null, myDrawn = null, selectedOwnSlot = null, pendingReveal = null, hasConfirmedPeek = false;
 const slotLabels = {'near-left':'近左','near-right':'近右','far-left':'遠左','far-right':'遠右'};
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function cardHTML(card, back=false){ if(back||!card) return '<div class="card back"></div>'; const red=card.suit==='♥'||card.suit==='♦'; return `<div class="card playing-card ${red?'red':''}"><span class="corner">${esc(card.rank)}${esc(card.suit)}</span><span class="rank">${esc(card.rank)}</span><span class="suit">${esc(card.suit)}</span></div>`; }
@@ -49,7 +49,7 @@ function renderPanels(){
  [waiting,peek,drawn,ability,match,over].forEach(x=>x.classList.add('hidden'));
  if(state.status==='waiting') {waiting.classList.remove('hidden');$('waitingText').textContent=`目前 ${state.players.length}/4 位玩家。把房間代碼 ${state.code} 分享給朋友。`; $('startBtn').classList.toggle('hidden',!(state.players[0]?.id===socket.id&&state.players.length===4));return;}
  if(state.status==='over'){over.classList.remove('hidden');over.classList.add('panel','over-panel');const scores=state.players.map(p=>({...p,score:p.score??0}));const min=Math.min(...scores.map(p=>p.score));over.innerHTML=`<h3>遊戲結束</h3><p>${esc(state.message)}</p>${scores.sort((a,b)=>a.score-b.score).map(p=>`<div class="score-row ${p.score===min?'winner':''}"><span>${esc(p.name)} ${p.score===min?'🏆':''}</span><strong>${p.score} 分</strong></div>`).join('')}`;return;}
- if(state.phase==='peek'){peek.classList.remove('hidden');return;}
+ if(state.phase==='peek'){peek.classList.remove('hidden');hasConfirmedPeek=!!state.youPeekDone;$('finishPeekBtn').disabled=hasConfirmedPeek;$('finishPeekBtn').textContent=hasConfirmedPeek?'已確認，等待其他玩家…':'我已記住，蓋回手牌';return;}
  if(state.phase==='drawn'&&state.youAreTurn){drawn.classList.remove('hidden');drawn.innerHTML=`<div class="drawn-layout"><div><h3>你抽到的牌</h3>${cardHTML(myDrawn)}</div><div><p>選擇與自己的一張手牌交換，或直接棄牌。</p><div class="drawn-actions"><button id="discardDrawBtn" class="primary">直接棄牌</button><button id="cancelExchangeBtn" class="ghost">取消選擇</button></div><p class="muted">交換：點選上方自己的任一張手牌。</p></div></div>`;$('discardDrawBtn').onclick=()=>socket.emit('discardDraw');$('cancelExchangeBtn').onclick=()=>toast('請點選自己的手牌進行交換，或直接棄牌。');}
  if(state.phase==='ability'&&state.ability?.actorId===socket.id){ability.classList.remove('hidden');ability.innerHTML=abilityHTML(state.ability);wireAbility();}
  if(state.phase==='match'){match.classList.remove('hidden');const current=state.players.find(p=>p.id===state.turnPlayerId);match.innerHTML=`<h3>配對時段</h3><p>目標：棄牌堆頂牌 ${state.topDiscard?esc(state.topDiscard.rank+state.topDiscard.suit):'—'}。選擇任何符合規則的手牌嘗試配對。配對失敗後其他玩家仍可繼續；成功一次後本時段結束。</p><div class="action-row">${state.youAreTurn?'<button id="endMatchBtn" class="primary">結束配對時段</button>':''}${state.youAreTurn?'<button id="declareBtn" class="ghost">宣告 CABO</button>':''}</div>`;if($('endMatchBtn'))$('endMatchBtn').onclick=()=>socket.emit('endMatchWindow');if($('declareBtn'))$('declareBtn').onclick=()=>socket.emit('declareCabo');}
@@ -61,12 +61,12 @@ function wireAbility(){const b=$('skipSwapBtn');if(b)b.onclick=()=>socket.emit('
 function renderHistory(){ $('history').innerHTML=(state.history||[]).slice().reverse().map(x=>`<li>${esc(x)}</li>`).join('')||'<li>尚無紀錄</li>'; }
 socket.on('connect',()=>{$('connection').textContent='已連線';$('connection').style.background='#dff1e3';$('connection').style.color='#21634e';});
 socket.on('disconnect',()=>{$('connection').textContent='連線中斷';$('connection').style.background='#fbe5e6';$('connection').style.color='#a42d3a';});
-socket.on('state',s=>{state=s;if(s.phase!=='drawn')myDrawn=null;render();});
+socket.on('state',s=>{if(s.phase==='peek' && state?.phase!=='peek')hasConfirmedPeek=false;state=s;if(s.phase!=='drawn')myDrawn=null;if(s.phase!=='peek')hasConfirmedPeek=false;render();});
 socket.on('drawnCard',card=>{myDrawn=card;render();});
 socket.on('privateReveal',data=>{pendingReveal=data;$('revealedCard').innerHTML=cardHTML(data.card);$('revealCaption').textContent=data.targetId?'請記住這張牌；只有你能看到。':'請記住這張牌，之後會蓋回原位。';$('revealModal').classList.remove('hidden');});
 function closeReveal(){ $('revealModal').classList.add('hidden'); pendingReveal=null; }
 $('closeReveal').onclick=closeReveal;$('ackReveal').onclick=closeReveal;
-socket.on('peekComplete',()=>toast('起始查看已完成。'));
+socket.on('peekComplete',()=>{hasConfirmedPeek=true;toast('已蓋回手牌，等待其他玩家確認。');render();});
 socket.on('errorMessage',msg=>toast(msg));
 $('createBtn').onclick=()=>socket.emit('createRoom',{name:$('playerName').value});
 $('joinBtn').onclick=()=>socket.emit('joinRoom',{code:$('roomCode').value,name:$('playerName').value});
