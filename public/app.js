@@ -11,8 +11,7 @@ function render(){ if(!state)return; showGame(); $('roomCodeLabel').textContent=
   $('players').innerHTML = state.players.map(p=>{
     const isCurrent=p.id===state.turnPlayerId; const hand=p.hand.map(item=>{
       const label=slotLabels[item.slot]||item.slot; const own=p.isMe; const known=!!item.card; const clickable=canClickHand(p,item);
-      const isBlindSwapSelection = !!(p.isMe && state.phase==='ability' && state.ability?.actorId===socket.id && state.ability?.kind==='blind-swap' && state.ability?.step==='target' && state.ability?.selectedOwnSlot===item.slot);
-      return `<div class="hand-slot"><div class="slot-label">${esc(label)}</div>${clickable?`<button class="card-btn ${isBlindSwapSelection?'selected':''}" data-slot="${esc(item.slot)}" data-player="${esc(p.id)}">${cardHTML(known?item.card:null,!known)}</button>`:cardHTML(known?item.card:null,!known)}${!known?'<span class="unknown-label">蓋牌</span>':''}</div>`;
+      return `<div class="hand-slot"><div class="slot-label">${esc(label)}</div>${clickable?`<button class="card-btn ${selectedOwnSlot===item.slot?'selected':''}" data-slot="${esc(item.slot)}" data-player="${esc(p.id)}">${cardHTML(known?item.card:null,!known)}</button>`:cardHTML(known?item.card:null,!known)}${!known?'<span class="unknown-label">蓋牌</span>':''}</div>`;
     }).join('');
     return `<article class="player-card ${p.isMe?'me':''}"><div class="player-head"><div><div class="player-name">${esc(p.name)}${p.isMe?'（你）':''}</div><div class="player-meta">${p.handCount} 張手牌 · ${p.connected?'在線':'離線'}</div></div><div class="player-tags">${isCurrent?'<span class="tag current">目前回合</span>':''}${p.declared?'<span class="tag declared">CABO</span>':''}</div></div><div class="hand-grid">${hand}</div></article>`;
   }).join('');
@@ -38,7 +37,10 @@ function onHandClick(playerId,slot){
   if(a.kind==='blind-swap'&&a.step==='target'&&playerId!==socket.id){socket.emit('abilityBlindTarget',{targetId:playerId,slot});return;}
   if(a.kind==='peek-swap'&&a.step==='target'&&playerId!==socket.id){socket.emit('abilityPeekTarget',{targetId:playerId,slot});return;}
   if(a.kind==='peek-swap'&&a.step==='swap-own'&&playerId===socket.id){socket.emit('abilitySwapOwn',{slot});return;}
+  // While an ability is active, never reinterpret a click as a match attempt.
+  return;
  }
+ if(state.phase==='ability') return;
  if(state.phase==='match'){
   const target=state.players.find(p=>p.id===playerId); if(!target)return;
   if(target.declared&&playerId!==socket.id){toast('宣告 CABO 的玩家受到保護。');return;}
@@ -57,15 +59,15 @@ function renderPanels(){
  if(state.phase==='turn'&&state.youAreTurn){match.classList.remove('hidden');match.innerHTML=`<h3>你的回合</h3><p>先抽一張牌，然後選擇交換或直接棄牌。</p>`;}
  if(state.phase==='turn'&&!state.youAreTurn){match.classList.remove('hidden');match.innerHTML=`<h3>等待回合</h3><p>等待 ${esc(state.players.find(p=>p.id===state.turnPlayerId)?.name||'其他玩家')} 行動。</p>`;}
 }
-function abilityHTML(a){const names={'peek-own':'查看自己的牌（7、8）','peek-other':'查看其他玩家的牌（9、10）','blind-swap':'盲換手牌（J、Q）','peek-swap':'查看後決定是否交換（K、A）'};let text='';if(a.kind==='peek-own')text='點選自己的一張手牌查看。';if(a.kind==='peek-other')text='點選其他玩家的一張手牌查看。';if(a.kind==='blind-swap')text=a.step==='own'?'先點選自己要交換的手牌。':'再點選另一位玩家的一張手牌；交換前不會顯示牌面。';if(a.kind==='peek-swap')text=a.step==='swap-own'?'你已查看目標牌。若要交換，請點選自己的一張手牌。':a.step==='decide-swap'?'已查看目標牌。請選擇是否交換。':'點選另一位玩家的一張手牌查看。';return `<h3>${names[a.kind]||'特殊能力'}</h3><p>${text}</p><div class="action-row">${a.kind==='peek-swap'&&a.step==='decide-swap'?'<button id="doSwapBtn" class="primary">我要交換</button><button id="skipSwapBtn">不交換</button>':''}${a.kind==='peek-other'||a.kind==='peek-swap'?'<span class="muted">只能選擇未宣告 CABO 的其他玩家。</span>':''}</div>`;}
+function abilityHTML(a){const names={'peek-own':'查看自己的牌（7、8）','peek-other':'查看其他玩家的牌（9、10）','blind-swap':'盲換手牌（J、Q）','peek-swap':'查看後決定是否交換（K、A）'};let text='';if(a.kind==='peek-own')text=a.step==='await-reveal-ack'?'已翻開你的手牌；關閉牌面視窗後才會進入配對。':'點選自己的一張手牌查看。';if(a.kind==='peek-other')text=a.step==='await-reveal-ack'?'已查看目標牌；關閉牌面視窗後才會進入配對。':'點選其他玩家的一張手牌查看。';if(a.kind==='blind-swap')text=a.step==='own'?'第 1 步：點選自己要換出去的一張手牌。':`第 2 步：已選好自己的「${slotLabels[a.selectedOwnSlot]||'手牌'}」，再點選另一位玩家的一張手牌。兩張牌會直接互換，不會翻開牌面。`;if(a.kind==='peek-swap')text=a.step==='swap-own'?'第 2 步：你已查看目標牌。若要交換，請點選自己的一張手牌。':a.step==='decide-swap'?'已查看目標牌。請選擇是否交換。':a.step==='await-reveal-ack'?'已翻開目標牌；關閉牌面視窗後才能決定是否交換。':'第 1 步：點選另一位玩家的一張手牌查看。';return `<h3>${names[a.kind]||'特殊能力'}</h3><p>${text}</p><div class="action-row">${a.kind==='peek-swap'&&a.step==='decide-swap'?'<button id="doSwapBtn" class="primary">我要交換</button><button id="skipSwapBtn">不交換</button>':''}${a.kind==='peek-other'||a.kind==='peek-swap'?'<span class="muted">只能選擇未宣告 CABO 的其他玩家。</span>':''}</div>`;}
 function wireAbility(){const b=$('skipSwapBtn');if(b)b.onclick=()=>socket.emit('abilityChooseSwap',{swap:false});const s=$('doSwapBtn');if(s)s.onclick=()=>socket.emit('abilityChooseSwap',{swap:true});}
 function renderHistory(){ $('history').innerHTML=(state.history||[]).slice().reverse().map(x=>`<li>${esc(x)}</li>`).join('')||'<li>尚無紀錄</li>'; }
 socket.on('connect',()=>{$('connection').textContent='已連線';$('connection').style.background='#dff1e3';$('connection').style.color='#21634e';});
 socket.on('disconnect',()=>{$('connection').textContent='連線中斷';$('connection').style.background='#fbe5e6';$('connection').style.color='#a42d3a';});
-socket.on('state',s=>{if(s.phase==='peek' && state?.phase!=='peek')hasConfirmedPeek=false;state=s;if(s.phase!=='drawn')myDrawn=null;if(s.phase!=='peek')hasConfirmedPeek=false;if(!(s.phase==='ability'&&s.ability?.actorId===socket.id&&s.ability?.kind==='blind-swap'))selectedOwnSlot=null;render();});
+socket.on('state',s=>{if(s.phase==='peek' && state?.phase!=='peek')hasConfirmedPeek=false;state=s;if(s.phase!=='drawn')myDrawn=null;if(s.phase!=='peek')hasConfirmedPeek=false;render();});
 socket.on('drawnCard',card=>{myDrawn=card;render();});
 socket.on('privateReveal',data=>{pendingReveal=data;$('revealedCard').innerHTML=cardHTML(data.card);$('revealCaption').textContent=data.targetId?'請記住這張牌；只有你能看到。':'請記住這張牌，之後會蓋回原位。';$('revealModal').classList.remove('hidden');});
-function closeReveal(){ $('revealModal').classList.add('hidden'); pendingReveal=null; }
+function closeReveal(){ if(pendingReveal){socket.emit('abilityRevealAck');} $('revealModal').classList.add('hidden'); pendingReveal=null; }
 $('closeReveal').onclick=closeReveal;$('ackReveal').onclick=closeReveal;
 socket.on('peekComplete',()=>{hasConfirmedPeek=true;toast('已蓋回手牌，等待其他玩家確認。');render();});
 socket.on('errorMessage',msg=>toast(msg));
