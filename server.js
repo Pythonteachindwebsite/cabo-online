@@ -27,10 +27,11 @@ function rankMatch(a,b) { return !!a && !!b && a.rank === b.rank; }
 function isRed(card) { return card.suit === '♥' || card.suit === '♦'; }
 function publicState(room, viewerId) {
   const viewer = playerById(room, viewerId);
+  const viewerPeekDone = !!(room.peekDone && room.peekDone.has(viewerId));
   return {
-    code: room.code, status: room.status, phase: room.phase, message: room.message,
+    code: room.code, status: room.status, phase: room.phase, message: room.message, youPeekDone: viewerPeekDone,
     players: room.players.map((p,i) => ({ id:p.id, name:p.name, index:i, connected:p.connected, handCount:p.hand.length, isMe:p.id===viewerId, declared:p.declared, score: room.status==='over' ? p.hand.reduce((s,x)=>s+x.card.score,0) : undefined,
-      hand: p.hand.map(x=>{ const known = p.id===viewerId || !!(room.knowledge[viewerId] && room.knowledge[viewerId][x.card.id] && room.knowledge[viewerId][x.card.id].knownTo.includes(viewerId)); return {slot:x.slot, card:known?x.card:null, known}; })
+      hand: p.hand.map(x=>{ const initialPeekVisible = room.phase==='peek' && p.id===viewerId && !viewerPeekDone && x.slot.startsWith('near-'); const known = initialPeekVisible; return {slot:x.slot, card:known?x.card:null, known}; })
     })),
     turnPlayerId: room.players[room.turn]?.id || null, youAreTurn: room.players[room.turn]?.id === viewerId,
     deckCount: room.deck.length, discard: room.discard.map(x=>({rank:x.rank,suit:x.suit,score:x.score})), topDiscard: room.discard.length ? room.discard[room.discard.length-1] : null,
@@ -76,7 +77,7 @@ function finishGame(room, reason) {
   log(room, `${reason} 遊戲立即結束，開始結算分數。`);
 }
 function startGame(room) {
-  room.drawn=null; room.deck = shuffle(makeDeck()); room.discard=[]; room.knowledge={}; room.history=[]; room.turn=0; room.phase='peek'; room.status='playing'; room.ability=null; room.matchSuccess=false; room.finalTurns=null; room.caboCaller=null;
+  room.drawn=null; room.deck = shuffle(makeDeck()); room.discard=[]; room.knowledge={}; room.peekDone=new Set(); room.history=[]; room.turn=0; room.phase='peek'; room.status='playing'; room.ability=null; room.matchSuccess=false; room.finalTurns=null; room.caboCaller=null;
   room.players.forEach(p=>{p.hand=[];p.declared=false; room.knowledge[p.id]={};});
   const slots=['near-left','near-right','far-left','far-right'];
   for(let n=0;n<4;n++) for(const p of room.players) p.hand.push({card:room.deck.pop(),slot:slots[n]});
@@ -154,13 +155,19 @@ io.on('connection', socket => {
   });
   socket.on('finishPeek',()=>{
     const room=getRoom(socket); if(!room || room.status!=='playing' || room.phase!=='peek') return;
-    // Initial knowledge is private and limited to the two near cards.
+    // Each player may privately view only the two near cards, then confirm.
     const p=playerById(room,socket.id); if(!p) return;
+    if(room.peekDone.has(p.id)) return;
     for(const item of p.hand.filter(x=>x.slot.startsWith('near-'))) remember(room,p.id,p.id,item);
+    room.peekDone.add(p.id);
     socket.emit('peekComplete');
-    const done=room.players.every(pl=>room.knowledge[pl.id] && room.knowledge[pl.id]._peekDone);
-    room.knowledge[p.id]._peekDone=true;
-    if(room.players.every(pl=>room.knowledge[pl.id]?._peekDone)) { room.phase='turn'; log(room,'所有玩家已完成起始查看，遊戲開始。'); }
+    const remaining=room.players.filter(pl=>!room.peekDone.has(pl.id)).length;
+    if(remaining===0) {
+      room.phase='turn';
+      log(room,'所有玩家已完成起始查看，遊戲開始。');
+    } else {
+      log(room,`${p.name} 已完成起始查看，正在等待其他 ${remaining} 位玩家確認。`);
+    }
     emitRoom(room);
   });
   socket.on('draw',()=>{
