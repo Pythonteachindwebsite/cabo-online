@@ -113,24 +113,31 @@ function validTarget(room, actorId, targetId) {
   return target && target.id!==actorId && !(room.caboCaller && target.id===room.caboCaller);
 }
 function swapItems(room, p1, item1, p2, item2) {
+  // Slots belong to the players' fixed board positions; only the card faces exchange.
   const s1=item1.slot, s2=item2.slot;
   const i1=p1.hand.indexOf(item1), i2=p2.hand.indexOf(item2);
-  item1.slot=s2; item2.slot=s1;
-  p1.hand[i1] = item2;
-  p2.hand[i2] = item1;
-  // Keep only card-face knowledge that remains certain, following the physical card.
+  const card1=item1.card, card2=item2.card;
+  p1.hand[i1] = {card:card2, slot:s1};
+  p2.hand[i2] = {card:card1, slot:s2};
+  // Knowledge follows the physical card, but its owner/slot is updated.
   for(const k of Object.values(room.knowledge)) {
-    if(k[item1.card.id]) { k[item1.card.id].ownerId=p2.id; k[item1.card.id].slot=s2; }
-    if(k[item2.card.id]) { k[item2.card.id].ownerId=p1.id; k[item2.card.id].slot=s1; }
+    if(k[card1.id]) { k[card1.id].ownerId=p2.id; k[card1.id].slot=s2; }
+    if(k[card2.id]) { k[card2.id].ownerId=p1.id; k[card2.id].slot=s1; }
   }
 }
 function findSlot(player, slot) { return player.hand.find(x=>x.slot===slot); }
 function discardDrawAndContinue(room, player, drawn, chosenSlot) {
   const old=findSlot(player,chosenSlot);
   if(!old) return false;
+  const discardedCard=old.card;
+  // The drawn card replaces exactly the chosen slot; no other slot is moved.
   player.hand[player.hand.indexOf(old)]={card:drawn,slot:chosenSlot};
-  room.discard.push(old.card); clearKnowledgeForCard(room,drawn.id); clearKnowledgeForCard(room,old.card.id);
-  log(room,`${player.name} 交換了一張手牌。`); openMatch(room); return true;
+  room.discard.push(discardedCard);
+  clearKnowledgeForCard(room,drawn.id);
+  clearKnowledgeForCard(room,discardedCard.id);
+  log(room,`${player.name} 交換了一張手牌，發動被打出牌 ${discardedCard.rank}${discardedCard.suit} 的能力。`);
+  startAbility(room,player,discardedCard);
+  return true;
 }
 
 io.on('connection', socket => {
